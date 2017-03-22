@@ -123,13 +123,11 @@ class lipschitzSBPS:
         return -self.tau*self.v
 
 class SBPS:
-    def __init__(self,D,N,M,k,ref_const=.05,tau=0,fix_neg=False,debug=[0,0],zero_mean_prior=False,prior_var = 1e5,opt=False,A=1,gamma=0.5,max_rt=50):
+    def __init__(self,D,N,M,k,ref_const=.05,tau=0,fix_neg=False,zero_mean_prior=False,prior_var = 1e5,opt=False,A=1,gamma=0.5,max_rt=50):
         self.v = np.zeros(D)
         self.N = N
         self.M = M
         self.D = D
-        self.verbose = debug[0]
-        self.plot_every_point = debug[1]
         self.up_factor = k
         self.ref_const = ref_const
         self.tau = tau
@@ -170,8 +168,6 @@ class SBPS:
         self.prior_mean = 0
         self.prior_vars = [self.prior_var]
         self.Sigma = 0
-        self.bounce_inds = []
-        self.ref_inds = []
         self.should_refresh = False
         self.num_iter = 1
 
@@ -240,26 +236,6 @@ class SBPS:
                     u = 0
             prev_pg = pg
             prev_upper = upper
-
-        if self.verbose and len(self.Ts) > 1 and self.plot_every_point:# and max(self.Gs) > 5000: ######
-            plt.figure()
-            plt.scatter(self.Ts,self.Gs,label='observations')
-            plt.errorbar(self.Ts,self.Gs,yerr=self.Stds,fmt='o')
-            plt.plot([0,self.this_time + rt],[self.G(0),self.G(rt + self.this_time)],label='regression line')
-            plt.plot([self.Ts[-1] + self.dt*i for i in range(len(predgs))],uppers,label='piecewise linear bound')
-            plt.plot([0,self.this_time + rt],[self.G(0),self.prior_mean*(rt + self.this_time)+self.G(0)],label='prior')
-
-            vG = np.asarray(self.Gs)
-            vT = np.asarray(self.Ts)
-            vW = np.asarray(self.weights)
-            mwG = np.dot(vG,vW)/float(np.sum(vW))
-            mwT = np.dot(vT,vW)/float(np.sum(vW))
-            S_like = (np.dot(vW,(mwG-vG)*vT))/float(np.dot(vW,(mwT-vT)*vT))
-            plt.plot([0,self.this_time + rt],[self.G(0),S_like*(rt + self.this_time)+self.G(0)],label='likelihood')
-
-            plt.scatter(self.this_time+rt,ri,label='proposal',color='red')
-            plt.legend(bbox_to_anchor=(0.5, -0.05))
-            print('plotting')
         return rt, ri
 
     def refresh_v(self):
@@ -282,7 +258,6 @@ class SBPS:
         self.v=self.v-2*np.dot(self.v,self.g)/np.dot(self.g,self.g)*self.g
 
         # storing various quantities
-        self.bounce_inds.append(1)
         self.bounce_times.append(self.Ts[-1])
         self.num_bounce += 1
         self.slopes.append(self.S)
@@ -322,23 +297,7 @@ class SBPS:
                 self.p_errs += 1
                 self.errs.append(G/upper)
             self.bounce()
-
-            # debugging
-            if self.verbose:# and max(self.Gs) > 5000:  ######
-                print( 'Bounce!')
-                print( 'Mini-batches evaluated:', len(self.Gs))
-                print( 'Acc. rate:', G/upper)
-                print( 'Mean Stds:', np.mean(self.Stds))
-                print( 'Mean SNR:', np.mean(np.abs(self.Gs))/np.mean(self.Stds))
-                print( 'Violated Upper Bounds:', self.p_errs)
-                plt.figure()
-                plt.scatter(self.Ts,self.Gs,label='observations')
-                plt.errorbar(self.Ts,self.Gs,yerr=self.Stds,fmt='o')
-                plt.plot([0,self.Ts[-1]],[self.G(0),self.G(self.Ts[-1])],label='regression line')
             self.clean()
-            self.bounce_inds.append(1)  #
-        else:                           #
-            self.bounce_inds.append(0)  #
 
     def init(self):
         # if this is the start of the run initializing the velocity and slope
@@ -382,10 +341,7 @@ class SBPS:
         if self.should_refresh:
             self.refresh_v()
             self.clean()
-            self.ref_inds.append(1)     #
-            self.bounce_inds.append(0)  #
         else:
-            self.ref_inds.append(0)     #
             # no refreshment, do a standard accept/reject
             self.accept_or_reject(G,self.upper)
 
@@ -401,7 +357,7 @@ class SBPS:
 
         ## If zero_mean_prior is false, update the prior mean ##
         if not self.zero_mean_prior:
-            self.prior_mean = np.mean(self.all_S) #
+            self.prior_mean = np.mean(self.all_S)
 
         self.total_time += self.t
         self.all_vs.append(self.v)
