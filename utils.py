@@ -91,7 +91,7 @@ def run_sampler(sampler,get_weights,set_weights,test_error,total_iter,n_epochs,N
     #D = int(np.sum([np.prod(s) for s in w_shapes]))
     lam=1e-4
     beta1=.99
-    min_var = 1e-8
+    min_var = 1e-15
     small_var_encountered = 0
     grad2=np.zeros(D)
     preconditioner = 1
